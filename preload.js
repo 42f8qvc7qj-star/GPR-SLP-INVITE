@@ -1,0 +1,2 @@
+const {contextBridge,ipcRenderer}=require('electron');
+contextBridge.exposeInMainWorld('gpr',{state:()=>ipcRenderer.invoke('state'),setLink:s=>ipcRenderer.invoke('set-link',s),invite:d=>ipcRenderer.invoke('invite',d),admin:d=>ipcRenderer.invoke('admin',d),adminSave:d=>ipcRenderer.invoke('admin-save',d),adminClear:d=>ipcRenderer.invoke('admin-clear',d),copy:s=>ipcRenderer.invoke('copy',s),onLink:cb=>ipcRenderer.on('new-link',(_,d)=>cb(d))});
