@@ -22,6 +22,8 @@ jobs:
           node-version: '22'
       - name: Install dependencies
         run: npm install
+      - name: Validate JavaScript syntax
+        run: node --check main.js
       - name: Build Windows installer and update manifest
         run: npm run dist
         env:
