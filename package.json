@@ -1,6 +1,6 @@
 {
   "name": "gpr-slp-invite",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "description": "GPR Sportradio SLP Invite",
   "main": "main.js",
@@ -43,6 +43,7 @@
     "generateUpdatesFilesForAllChannels": true
   },
   "dependencies": {
-    "electron-updater": "^6.6.2"
+    "electron-updater": "^6.6.2",
+    "playwright-core": "^1.56.0"
   }
 }
