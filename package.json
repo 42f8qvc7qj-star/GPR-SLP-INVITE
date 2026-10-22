@@ -1,6 +1,6 @@
 {
   "name": "gpr-slp-invite",
-  "version": "1.4.3",
+  "version": "1.4.4",
   "private": true,
   "description": "GPR Sportradio SLP Invite",
   "main": "main.js",
