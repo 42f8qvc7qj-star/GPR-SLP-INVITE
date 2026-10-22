@@ -10,7 +10,7 @@ permissions:
 
 concurrency:
   group: slp-invite-publish
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -20,10 +20,28 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: package.json
+      - name: Cache npm downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: npm-windows-${{ hashFiles('package.json') }}
+          restore-keys: |
+            npm-windows-
       - name: Install dependencies
-        run: npm install
+        run: npm install --no-audit --no-fund
       - name: Validate JavaScript syntax
-        run: node --check main.js
+        shell: pwsh
+        run: |
+          node --check main.js
+          node --check preload.js
+          $html = Get-Content index.html -Raw
+          $match = [regex]::Match($html, '(?s)<script(?:\\s[^>]*)?>(.*?)</script>')
+          if (!$match.Success) { throw 'Inline application script missing' }
+          [System.IO.File]::WriteAllText((Join-Path $PWD 'ui-syntax-check.js'), $match.Groups[1].Value)
+          node --check ui-syntax-check.js
+          Remove-Item ui-syntax-check.js
       - name: Build Windows installer and update manifest
         run: npm run dist
         env:
