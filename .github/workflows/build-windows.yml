@@ -1,34 +1,82 @@
-name: Build Windows
+name: Build Windows and deploy updates
 
 on:
   workflow_dispatch:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: slp-invite-publish
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: windows-latest
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
-
       - name: Install dependencies
         run: npm install
-
-      - name: Build Windows EXE
+      - name: Build Windows installer and update manifest
         run: npm run dist
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload Windows EXE
+      - name: Verify release artifacts
+        shell: pwsh
+        run: |
+          if (!(Test-Path dist/latest.yml)) { throw "latest.yml missing" }
+          if (!(Get-ChildItem dist -Filter "*.exe" | Where-Object { $_.Name -notmatch "Portable" })) { throw "Installer missing" }
+      - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
           name: GPR-SLP-INVITE-Windows
-          path: dist/*.exe
+          path: |
+            dist/*.exe
+            dist/*.blockmap
+            dist/latest.yml
           if-no-files-found: error
+
+  deploy:
+    needs: build
+    if: ${{ vars.VPS_DEPLOY_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: GPR-SLP-INVITE-Windows
+          path: release
+      - name: Configure trusted SSH connection
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_SSH_HOST_KEY: ${{ secrets.VPS_SSH_HOST_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_SSH_HOST_KEY" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          test -s ~/.ssh/id_ed25519
+          test -s ~/.ssh/known_hosts
+      - name: Publish installers first, manifest last
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_UPDATE_DIR: ${{ vars.VPS_UPDATE_DIR }}
+        run: |
+          set -euo pipefail
+          test -n "$VPS_HOST" && test -n "$VPS_USER" && test -n "$VPS_UPDATE_DIR"
+          test -f release/latest.yml
+          SSH=(ssh -o StrictHostKeyChecking=yes -i ~/.ssh/id_ed25519)
+          RSYNC_SSH="ssh -o StrictHostKeyChecking=yes -i $HOME/.ssh/id_ed25519"
+          "${SSH[@]}" "$VPS_USER@$VPS_HOST" "mkdir -p -- '$VPS_UPDATE_DIR'"
+          rsync -av --exclude='latest.yml' -e "$RSYNC_SSH" release/ "$VPS_USER@$VPS_HOST:$VPS_UPDATE_DIR/"
+          rsync -av -e "$RSYNC_SSH" release/latest.yml "$VPS_USER@$VPS_HOST:$VPS_UPDATE_DIR/latest.yml.new"
+          "${SSH[@]}" "$VPS_USER@$VPS_HOST" "mv -f -- '$VPS_UPDATE_DIR/latest.yml.new' '$VPS_UPDATE_DIR/latest.yml'"
