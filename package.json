@@ -37,7 +37,7 @@
     "publish": [
       {
         "provider": "generic",
-        "url": "https://updates.example.invalid/slp-invite/"
+        "url": "https://gpr-slp-updater.just-produced.nl/slp-invite/"
       }
     ],
     "generateUpdatesFilesForAllChannels": true
