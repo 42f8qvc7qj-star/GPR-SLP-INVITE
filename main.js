@@ -29,11 +29,12 @@ async function pressWhatsAppSend(message) {
       windowsHide:true,timeout:28000,maxBuffer:1048576,env
     },(error,stdout,stderr)=>{
       const output=String(stdout||'').trim().split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
-      const result=output.find(x=>/^(CLICKED:|WHATSAPP_NOT_FOREGROUND|COMPOSER_NOT_VERIFIED|SEND_BUTTON_NOT_FOUND|MESSAGE_MISSING|MESSAGE_TOO_SHORT|AUTOMATION_ERROR:)/.test(x))||'';
+      const result=output.find(x=>/^(CLICKED:|WHATSAPP_NOT_FOREGROUND|COMPOSER_NOT_VERIFIED|COMPOSER_FOCUS_FAILED|SEND_BUTTON_NOT_FOUND|MESSAGE_MISSING|MESSAGE_TOO_SHORT|AUTOMATION_ERROR:)/.test(x))||'';
       const attempted=result.startsWith('CLICKED:');
       const problems={
         WHATSAPP_NOT_FOREGROUND:'WhatsApp kwam niet op de voorgrond.',
-        COMPOSER_NOT_VERIFIED:'Het ingevulde bericht kon niet worden gecontroleerd.',
+        COMPOSER_NOT_VERIFIED:'Het berichtveld kon niet worden gevonden.',
+        COMPOSER_FOCUS_FAILED:'Het WhatsApp-berichtveld kon niet worden geactiveerd.',
         SEND_BUTTON_NOT_FOUND:'De knop Verzenden kon niet worden gevonden.',
         MESSAGE_MISSING:'Het WhatsApp-bericht ontbreekt.',
         MESSAGE_TOO_SHORT:'Het WhatsApp-bericht is te kort.'
