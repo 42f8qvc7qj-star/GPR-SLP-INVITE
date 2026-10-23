@@ -1,6 +1,6 @@
 {
   "name": "gpr-slp-invite",
-  "version": "1.4.6",
+  "version": "1.4.7",
   "private": true,
   "description": "GPR Sportradio SLP Invite",
   "main": "main.js",
@@ -39,7 +39,13 @@
         "url": "https://gpr-slp-updater.just-produced.nl/slp-invite/"
       }
     ],
-    "generateUpdatesFilesForAllChannels": true
+    "generateUpdatesFilesForAllChannels": true,
+    "extraResources": [
+      {
+        "from": "scripts/whatsapp-send.ps1",
+        "to": "whatsapp-send.ps1"
+      }
+    ]
   },
   "dependencies": {
     "electron-updater": "^6.6.2",
