@@ -42,6 +42,20 @@ jobs:
           [System.IO.File]::WriteAllText((Join-Path $PWD 'ui-syntax-check.js'), $match.Groups[1].Value)
           node --check ui-syntax-check.js
           Remove-Item ui-syntax-check.js
+      - name: Validate WhatsApp PowerShell automation
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Join-Path $PWD 'scripts/whatsapp-send.ps1'),
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
       - name: Build Windows installer and update manifest
         run: npm run dist
         env:
@@ -50,6 +64,7 @@ jobs:
         shell: pwsh
         run: |
           if (!(Test-Path dist/latest.yml)) { throw "latest.yml missing" }
+          if (!(Test-Path dist/win-unpacked/resources/whatsapp-send.ps1)) { throw "WhatsApp automation missing from installed app" }
           if (!(Get-ChildItem dist -Filter "*.exe" | Where-Object { $_.Name -notmatch "Portable" })) { throw "Installer missing" }
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
