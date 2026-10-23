@@ -3,6 +3,7 @@
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
+Add-Type -AssemblyName System.Windows.Forms
 Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
@@ -37,22 +38,53 @@ function Read-Text($element) {
     return ''
 }
 
-function Find-Composer($window, [string]$expected) {
-    $conditions = [System.Windows.Automation.OrCondition]::new(
-        [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Edit),
-        [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Document)
-    )
-    $fields = $window.FindAll([System.Windows.Automation.TreeScope]::Descendants, $conditions)
-    foreach ($field in $fields) {
+function Test-ComposerClipboard($window, [string]$expected) {
+    # The Store version of WhatsApp often does not expose its text to UI Automation.
+    # Read the selected text via the normal clipboard, but only send after an exact match.
+    $originalClipboard = $null
+    $hadClipboard = $false
+    try {
         try {
-            if (-not $field.Current.IsEnabled -or $field.Current.IsOffscreen) { continue }
-            $content = Normalize-Text (Read-Text $field)
-            if ($content.Length -ge $expected.Length -and $content.Contains($expected)) {
-                return $field
+            $originalClipboard = [System.Windows.Forms.Clipboard]::GetDataObject()
+            $hadClipboard = $null -ne $originalClipboard
+        } catch {}
+        $rect = $window.Current.BoundingRectangle
+        if ($rect.IsEmpty -or $rect.Width -lt 400 -or $rect.Height -lt 350) { return $false }
+        # WhatsApp's message composer is at the bottom of the conversation pane.
+        # Clicking near its middle avoids the send and attachment controls.
+        $x = [int]($rect.Left + $rect.Width * 0.65)
+        $y = [int]($rect.Bottom - 72)
+        $old = New-Object WhatsAppInput+Point
+        [void][WhatsAppInput]::GetCursorPos([ref]$old)
+        try {
+            [void][WhatsAppInput]::SetCursorPos($x, $y)
+            Start-Sleep -Milliseconds 90
+            [WhatsAppInput]::mouse_event(2, 0, 0, 0, [UIntPtr]::Zero)
+            Start-Sleep -Milliseconds 50
+            [WhatsAppInput]::mouse_event(4, 0, 0, 0, [UIntPtr]::Zero)
+        } finally {
+            [void][WhatsAppInput]::SetCursorPos($old.X, $old.Y)
+        }
+        Start-Sleep -Milliseconds 120
+        [System.Windows.Forms.Clipboard]::Clear()
+        [System.Windows.Forms.SendKeys]::SendWait('^a')
+        Start-Sleep -Milliseconds 100
+        [System.Windows.Forms.SendKeys]::SendWait('^c')
+        Start-Sleep -Milliseconds 220
+        $copied = Normalize-Text ([System.Windows.Forms.Clipboard]::GetText())
+        [System.Windows.Forms.SendKeys]::SendWait('{RIGHT}')
+        return ($copied -eq $expected)
+    } catch {
+        return $false
+    } finally {
+        try {
+            if ($hadClipboard) {
+                [System.Windows.Forms.Clipboard]::SetDataObject($originalClipboard, $true)
+            } else {
+                [System.Windows.Forms.Clipboard]::Clear()
             }
         } catch {}
     }
-    return $null
 }
 
 function Find-SendButton($window, $composer) {
@@ -117,8 +149,7 @@ try {
     $expected = Normalize-Text $message
     if ($expected.Length -lt 15) { Write-Output 'MESSAGE_TOO_SHORT'; exit 2 }
 
-    $fields = [System.Collections.Generic.HashSet[string]]::new()
-    $deadline = (Get-Date).AddSeconds(22)
+    $deadline = (Get-Date).AddSeconds(16)
     $foundWhatsApp = $false
     $foundComposer = $false
     while ((Get-Date) -lt $deadline) {
@@ -135,17 +166,14 @@ try {
         if ($process.ProcessName -notmatch '(?i)WhatsApp' -and $windowTitle -notmatch '(?i)WhatsApp') { continue }
         $foundWhatsApp = $true
         try {
-            $composer = Find-Composer $window $expected
-            if ($null -eq $composer) { continue }
+            if (-not (Test-ComposerClipboard $window $expected)) { continue }
             $foundComposer = $true
-            $sendButton = Find-SendButton $window $composer
-            if ($null -eq $sendButton) { continue }
-            $result = Click-SendButton $sendButton $handle
-            if ($result -like 'CLICKED:*') {
-                Write-Output $result
-                exit 0
-            }
-            if ($result -eq 'FOCUS_CHANGED') { continue }
+            if ([WhatsAppInput]::GetForegroundWindow() -ne $handle) { continue }
+            # The exact draft is verified. Enter is the same action the operator
+            # already confirmed works manually on this WhatsApp installation.
+            [System.Windows.Forms.SendKeys]::SendWait('{ENTER}')
+            Write-Output 'CLICKED:VERIFIED_ENTER'
+            exit 0
         } catch {
             # WhatsApp redraws its UI as the conversation opens.
         }
